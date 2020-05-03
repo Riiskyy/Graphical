@@ -66,159 +66,191 @@ Function Show-Graph {
     [cmdletbinding()]
     [alias("Graph")]
     Param(
-            # Parameter help description
-            [Parameter(Mandatory=$true, ValueFromPipeline)] [int[]] $Datapoints,
-            [String] $XAxisTitle,
-            [String] $YAxisTitle,
-            [String] $GraphTitle = 'Untitled',
-            [ValidateScript({
-                if($_ -le 5){
-                Throw "Can not set XAxisStep less than or equals to 5"
+        # Parameter help description
+        [Parameter(Mandatory = $true, ValueFromPipeline)]
+        [int[]] $Datapoints,
+
+        [Parameter()]
+        [String] $XAxisTitle,
+
+        [Parameter()]
+        [String] $YAxisTitle,
+
+        [Parameter()]
+        [Int] $StartOfRange,
+
+        [Parameter()]
+        [Int] $EndofRange,
+
+        [Parameter()]
+        [String] $GraphTitle = 'Untitled',
+
+        [Parameter()]
+        [ValidateScript( {
+                if ($_ -le 5) {
+                    Throw "Can not set XAxisStep less than or equals to 5"
                 }
-                else{
+                else {
                     $true
                 }
-            })] [Int] $XAxisStep = 10,
-            [Int] $YAxisStep = 10,
-            [ValidateSet("Bar","Scatter","Line")] [String] $Type = 'Bar',
-            [Hashtable] $ColorMap,
-            [Switch] $HorizontalLines
+        })]
+        [Int] $XAxisStep = 10,
+
+        [Parameter()]
+        [Int] $YAxisStep = 10,
+
+        [Parameter()]
+        [ValidateSet(
+            "Bar",
+            "Scatter",
+            "Line"
+        )]
+        [String] $Type = 'Bar',
+
+        [Parameter()]
+        [Hashtable] $ColorMap,
+
+        [Parameter()]
+        [Switch] $HorizontalLines
     )
 
     # graph boundary marks
-    $TopLeft = [char]9484
-    $BottomLeft = [char]9492
-    $TopRight = [char]9488
-    $BottomRight = [char]9496
-    $VerticalEdge = [char]9474
+    $TopLeft               = [char]9484
+    $BottomLeft            = [char]9492
+    $TopRight              = [char]9488
+    $BottomRight           = [char]9496
+    $VerticalEdge          = [char]9474
     $TopEdge = $BottomEdge = [char]9472
 
     # Calculate Max, Min and Range of Y axis
     $NumOfDatapoints = $Datapoints.Count
     $Metric = $Datapoints | Measure-Object -Maximum -Minimum
-    $EndofRange = $Metric.Maximum + ($YAxisStep - $Metric.Maximum % $YAxisStep)
-    $StartOfRange = $Metric.Minimum - ($Metric.Minimum % $YAxisStep)
-    $difference =  $EndofRange - $StartOfRange
-    $NumOfRows = $difference/($YAxisStep)
+    if (-not $PSBoundParameters.ContainsKey('StartOfRange')) {
+        $StartOfRange = $Metric.Minimum - ($Metric.Minimum % $YAxisStep)
+    }
+    if (-not $PSBoundParameters.ContainsKey('EndofRange')) {
+        $EndofRange = $Metric.Maximum + ($YAxisStep - $Metric.Maximum % $YAxisStep)
+    }
+    $difference = $EndofRange - $StartOfRange
+    $NumOfRows  = $difference/($YAxisStep)
 
     # Calculate label lengths
-    $NumOfLabelsOnYAxis = $NumOfRows
+    $NumOfLabelsOnYAxis    = $NumOfRows
     $LengthOfMaxYAxisLabel = (($Datapoints | Measure-Object -Maximum).Maximum).tostring().length
-    
+
     $YAxisTitleAlphabetCounter = 0
     $YAxisTitleStartIdx, $YAxisTitleEndIdx = CenterAlignStringReturnIndices -String $YAxisTitle -Length $NumOfRows
-    
-    If($YAxisTitle.Length -gt $NumOfLabelsOnYAxis){
+
+    if ($YAxisTitle.Length -gt $NumOfLabelsOnYAxis) {
         Write-Warning -Message "No. Alphabets in YAxisTitle [$($YAxisTitle.Length)] can't be greator than no. of Labels on Y-Axis [$NumOfLabelsOnYAxis]"
         Write-Warning -Message "YAxisTitle will be cropped"
     }
-    
+
     # Create a 2D Array to save datapoints  in a 2D format
-    switch($Type){
-        'Bar'       {$Array = Get-BarPlot -Datapoints $Datapoints -Step $YAxisStep -StartOfRange $StartOfRange -EndofRange $EndofRange }
-        'Scatter'   {$Array = Get-ScatterPlot -Datapoints $Datapoints -Step $YAxisStep -StartOfRange $StartOfRange -EndofRange $EndofRange }
-        'Line'      {$Array = Get-LinePlot -Datapoints $Datapoints -Step $YAxisStep -StartOfRange $StartOfRange -EndofRange $EndofRange }
+    switch ($Type) {
+        'Bar'     { $Array = Get-BarPlot -Datapoints $Datapoints -Step $YAxisStep -StartOfRange $StartOfRange -EndofRange $EndofRange }
+        'Scatter' { $Array = Get-ScatterPlot -Datapoints $Datapoints -Step $YAxisStep -StartOfRange $StartOfRange -EndofRange $EndofRange }
+        'Line'    { $Array = Get-LinePlot -Datapoints $Datapoints -Step $YAxisStep -StartOfRange $StartOfRange -EndofRange $EndofRange }
     }
-    
+
     # Preparing the step markings on the X-Axis
     $Increment = $XAxisStep
     $XAxisLabel = " " * ($LengthOfMaxYAxisLabel + 4)
     $XAxis = " " * ($LengthOfMaxYAxisLabel + 3) + [char]9492
-    
-    For($Label =1;$Label -le $NumOfDatapoints;$Label++){
-        if ([math]::floor($Label/$XAxisStep) ){
-            $XAxisLabel +=  $Label.tostring().PadLeft($Increment)
-            $XAxis += ([char]9516).ToString()
-            $XAxisStep+=$Increment
+
+    for ($Label = 1; $Label -le $NumOfDatapoints; $Label++) {
+        if ([math]::floor($Label/$XAxisStep) ) {
+            $XAxisLabel += $Label.tostring().PadLeft($Increment)
+            $XAxis      += ([char]9516).ToString()
+            $XAxisStep  += $Increment
         }
-        else{
-            $XAxis += [Char]9472
+        else {
+            $XAxis += [char]9472
         }
     }
 
     # calculate boundaries of the graph
-    $TopBoundaryLength = $XAxis.Length - $GraphTitle.Length
+    $TopBoundaryLength    = $XAxis.Length - $GraphTitle.Length
     $BottomBoundaryLength = $XAxis.Length + 2
-    
+
     # draw top boundary
-    [string]::Concat($TopLeft," ",$GraphTitle," ",$([string]$TopEdge * $TopBoundaryLength),$TopRight)
-    [String]::Concat($VerticalEdge,$(" "*$($XAxis.length+2)),$VerticalEdge) # extra line to add space between top-boundary and the graph
-    
+    [string]::Concat($TopLeft, " ", $GraphTitle, " ", $([string]$TopEdge * $TopBoundaryLength), $TopRight)
+    [string]::Concat($VerticalEdge, $(" "*$($XAxis.length + 2)), $VerticalEdge) # extra line to add space between top-boundary and the graph
+
     # draw the graph
-    For($i=$NumOfRows;$i -gt 0;$i--){
+    for ($i = $NumOfRows; $i -gt 0; $i--) {
         $Row = ''
-        For($j=0;$j -lt $NumOfDatapoints;$j++){
-            $Cell = $Array[$i,$j]
-            if([String]::IsNullOrWhiteSpace($Cell)){
-                if($AddHorizontalLines){
-                    $String = [Char]9472
+        for ($j = 0; $j -lt $NumOfDatapoints; $j++) {
+            $Cell = $Array[$i, $j]
+            if ([string]::IsNullOrWhiteSpace($Cell)) {
+                if ($AddHorizontalLines) {
+                    $String = [char]9472
                 }
-                else{
+                else {
                     $String = ' '
                 }
                 #$String = [Char]9532
-            }else{
+            }
+            else {
                 $String = $Cell
             }
-            $Row = [string]::Concat($Row,$String)
+            $Row = [string]::Concat($Row, $String)
         }
-        
+
         $YAxisLabel = $StartOfRange + $i*$YAxisStep
-        
-        
+
         # add Y-Axis title alphabets if it exists in a row
-        If($i -in $YAxisTitleStartIdx..$YAxisTitleEndIdx -and $YAxisTitle){
+        if ($i -in $YAxisTitleStartIdx..$YAxisTitleEndIdx -and $YAxisTitle) {
             $YAxisLabelAlphabet = $YAxisTitle[$YAxisTitleAlphabetCounter]
             $YAxisTitleAlphabetCounter++
         }
         else {
             $YAxisLabelAlphabet = ' '
         }
-        
 
-        If($ColorMap){
+        if ($ColorMap) {
 
-            $Keys = $ColorMap.Keys| Sort-Object
+            $Keys = $ColorMap.Keys | Sort-Object
             $LowerBound = $StartOfRange
-            $Map=@()
+            $Map = @()
 
-            $Map += For($k=0;$k -lt $Keys.count;$k++){
+            $Map += for ($k = 0; $k -lt $Keys.count; $k++) {
                 [PSCustomObject]@{
-                    LowerBound  = $LowerBound
-                    UpperBound  = $Keys[$k]
-                    Color       = $ColorMap[$Keys[$k]]
+                    LowerBound = $LowerBound
+                    UpperBound = $Keys[$k]
+                    Color      = $ColorMap[$Keys[$k]]
                 }
-                $LowerBound = $Keys[$k]+1
+                $LowerBound = $Keys[$k] + 1
             }
-            
-            $Color = $Map.ForEach({
-                if($YAxisLabel -in $_.LowerBound..$_.UpperBound){
-                    $_.Color
-                }
-            })
 
-            if ([String]::IsNullOrEmpty($Color)) {$Color = "White"}
-            
+            $Color = $Map.ForEach( {
+                    if ($YAxisLabel -in $_.LowerBound..$_.UpperBound) {
+                        $_.Color
+                    }
+                })
+
+            if ([String]::IsNullOrEmpty($Color)) { $Color = "White" }
+
             Write-Graph $YAxisLabelAlphabet $YAxisLabel $Row $Color 'DarkYellow'
 
         }
-        else{
+        else {
             # Default coloring mode divides the datapoints in percentage range
-            # and color code them automatically 
-            # i.e, 
+            # and color code them automatically
+            # i.e,
             # 1-40% -> Green
             # 41-80% -> Yellow
             # 81-100% -> Red
 
-            $RangePercent = $i/$NumOfRows * 100
+            $RangePercent = $i / $NumOfRows * 100
             # To color the graph depending upon the datapoint value
-            If ($RangePercent -gt 80) {
+            if ($RangePercent -gt 80) {
                 Write-Graph $YAxisLabelAlphabet $YAxisLabel $Row 'Red' 'DarkYellow'
             }
-            elseif($RangePercent-le 80 -and $RangePercent -gt 40) {
-                Write-Graph $YAxisLabelAlphabet $YAxisLabel $Row 'Yellow' 'DarkYellow' 
+            elseif ($RangePercent -le 80 -and $RangePercent -gt 40) {
+                Write-Graph $YAxisLabelAlphabet $YAxisLabel $Row 'Yellow' 'DarkYellow'
             }
-            elseif($RangePercent -le 40 -and $RangePercent -ge 1) {
+            elseif ($RangePercent -le 40 -and $RangePercent -ge 1) {
                 Write-Graph $YAxisLabelAlphabet $YAxisLabel $Row 'Green' 'DarkYellow'
             }
             else {
@@ -226,26 +258,26 @@ Function Show-Graph {
                 #Write-Host "$($YAxisLabel.PadLeft($LengthOfMaxYAxisLabel+2))|"
             }
         }
-        
-    }
-    
-    # draw bottom boundary
-    $XAxisLabel +=" "*($XAxis.Length-$XAxisLabel.Length) # to match x-axis label length with x-axis length
-    [String]::Concat($VerticalEdge,$XAxis,"  ",$VerticalEdge) # Prints X-Axis horizontal line
-    [string]::Concat($VerticalEdge,$XAxisLabel,"  ",$VerticalEdge) # Prints X-Axis step labels
 
-    
-    if(![String]::IsNullOrWhiteSpace($XAxisTitle)){
+    }
+
+    # draw bottom boundary
+    $XAxisLabel += " "*($XAxis.Length - $XAxisLabel.Length) # to match x-axis label length with x-axis length
+    [String]::Concat($VerticalEdge, $XAxis, "  ", $VerticalEdge) # Prints X-Axis horizontal line
+    [string]::Concat($VerticalEdge, $XAxisLabel, "  ", $VerticalEdge) # Prints X-Axis step labels
+
+
+    if (![String]::IsNullOrWhiteSpace($XAxisTitle)) {
         # Position the x-axis label at the center of the axis
-        $XAxisTitle = " "*$LengthOfMaxYAxisLabel + (CenterAlignString $XAxisTitle $XAxis.Length)        
+        $XAxisTitle = " "*$LengthOfMaxYAxisLabel + (CenterAlignString $XAxisTitle $XAxis.Length)
         Write-Host -Object $VerticalEdge -NoNewline
         Write-Host -Object $XAxisTitle -ForegroundColor DarkYellow -NoNewline # Prints XAxisTitle
-        Write-Host -Object $(" "*$(($LengthOfMaxYAxisLabel + $XAxis.length) - $XAxisTitle.Length - 2)) $VerticalEdge
+        Write-Host -Object $((" "*$(($LengthOfMaxYAxisLabel + $XAxis.length) - $XAxisTitle.Length - 3)) + " $VerticalEdge")
     }
-    
+
     # bottom boundary
-    [string]::Concat($BottomLeft,$([string]$BottomEdge * $BottomBoundaryLength),$BottomRight)
-    
+    [string]::Concat($BottomLeft, $([string]$BottomEdge * $BottomBoundaryLength), $BottomRight)
+
 }
 
 #$Datapoints = (211..278|Get-Random -Count 50)
